@@ -88,6 +88,7 @@ def load_era5_csv(
     before = len(cleaned)
     cleaned = cleaned.dropna(subset=["date"])
     cleaned = cleaned.sort_values("date").drop_duplicates(subset=["date"], keep="first")
+    cleaned.loc[cleaned["rainfall_mm"] < 1.0, "rainfall_mm"] = 0.0
     dropped = before - len(cleaned)
 
     print(f"ERA5 rows read: {before}")

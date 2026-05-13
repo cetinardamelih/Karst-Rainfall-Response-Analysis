@@ -25,6 +25,7 @@ from src.analysis import (
 )
 from src.preprocessing import clean_timeseries
 from src.synthetic_data import generate_synthetic_karst_data
+from src.ui_config import CHART_COLORS, UI_TEXT
 
 
 STANDARD_COLUMNS = {
@@ -36,9 +37,40 @@ STANDARD_COLUMNS = {
 
 
 st.set_page_config(
-    page_title="Karst Rainfall-Response Analysis",
+    page_title=UI_TEXT["app_title"],
     layout="wide",
 )
+
+PLOTLY_DRAW_CONFIG = {
+    "displaylogo": False,
+    "scrollZoom": True,
+    "doubleClick": "reset+autosize",
+    "modeBarButtonsToAdd": [
+        "drawline",
+        "drawopenpath",
+        "drawclosedpath",
+        "drawrect",
+        "drawcircle",
+        "eraseshape",
+        "toggleSpikelines",
+    ],
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "karst_plot",
+        "scale": 2,
+    },
+}
+
+PLOT_DRAG_MODES = {
+    "Zoom": "zoom",
+    "Pan": "pan",
+    "Select box": "select",
+    "Lasso": "lasso",
+    "Draw line": "drawline",
+    "Free draw": "drawopenpath",
+    "Draw rectangle": "drawrect",
+    "Draw circle": "drawcircle",
+}
 
 
 def initialize_state() -> None:
@@ -260,9 +292,9 @@ def markdown_to_html(markdown_text: str) -> str:
   <meta charset="utf-8">
   <title>Karst Rainfall-Response Analysis Report</title>
   <style>
-    body {{ font-family: Arial, sans-serif; max-width: 920px; margin: 40px auto; line-height: 1.55; color: #1f2933; }}
-    h1, h2 {{ color: #102a43; }}
-    code {{ background: #f2f4f7; padding: 2px 4px; }}
+    body {{ font-family: Arial, sans-serif; max-width: 920px; margin: 40px auto; line-height: 1.55; color: {CHART_COLORS["html_text"]}; }}
+    h1, h2 {{ color: {CHART_COLORS["html_heading"]}; }}
+    code {{ background: {CHART_COLORS["code_background"]}; padding: 2px 4px; }}
   </style>
 </head>
 <body>{body}</body>
@@ -270,31 +302,83 @@ def markdown_to_html(markdown_text: str) -> str:
 """
 
 
-def plot_time_series(df: pd.DataFrame, rolling_window: int, show_rolling: bool, normalize: bool) -> go.Figure:
+def enhance_plot_controls(fig: go.Figure, dragmode: str) -> go.Figure:
+    """Apply shared interaction affordances to Plotly charts."""
+    fig.update_layout(
+        dragmode=dragmode,
+        hovermode="x unified",
+        uirevision="karst-plots",
+        newshape=dict(
+            line=dict(color=CHART_COLORS["discharge_peak"], width=3),
+            opacity=0.85,
+            fillcolor="rgba(204, 0, 0, 0.12)",
+        ),
+        modebar=dict(orientation="h"),
+    )
+    fig.update_xaxes(
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        rangeslider=dict(visible=True),
+    )
+    fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+    return fig
+
+
+def show_plotly_figure(fig: go.Figure, key: str, dragmode: str) -> None:
+    """Render a Plotly figure with drawing tools enabled."""
+    st.plotly_chart(
+        enhance_plot_controls(fig, dragmode),
+        width="stretch",
+        config=PLOTLY_DRAW_CONFIG,
+        key=key,
+    )
+
+
+def positive_for_log(series: pd.Series) -> pd.Series:
+    """Mask non-positive values so log-axis charts remain valid."""
+    return series.where(series > 0)
+
+
+def plot_time_series(
+    df: pd.DataFrame,
+    rolling_window: int,
+    show_rolling: bool,
+    normalize: bool,
+    discharge_axis_type: str = "linear",
+) -> go.Figure:
     """Create interactive rainfall-discharge time series figure."""
     plot_df = df.copy()
     rain = normalized_series(plot_df["rainfall_mm"]) if normalize else plot_df["rainfall_mm"]
     discharge = normalized_series(plot_df["spring_discharge_m3s"]) if normalize else plot_df["spring_discharge_m3s"]
+    if discharge_axis_type == "log":
+        discharge = positive_for_log(discharge)
     rolling = discharge.rolling(rolling_window, min_periods=1).mean()
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_bar(x=plot_df["date"], y=rain, name="Rainfall", marker_color="#3B82A6", opacity=0.45, secondary_y=True)
-    fig.add_trace(go.Scatter(x=plot_df["date"], y=discharge, mode="lines", name="Discharge", line=dict(color="#B45309", width=2)), secondary_y=False)
+    fig.add_bar(x=plot_df["date"], y=rain, name="Rainfall", marker_color=CHART_COLORS["rainfall"], opacity=0.45, secondary_y=True)
+    fig.add_trace(go.Scatter(x=plot_df["date"], y=discharge, mode="lines", name="Discharge", line=dict(color=CHART_COLORS["discharge"], width=2)), secondary_y=False)
     if show_rolling:
-        fig.add_trace(go.Scatter(x=plot_df["date"], y=rolling, mode="lines", name=f"{rolling_window}-day rolling discharge", line=dict(color="#111827", width=2, dash="dot")), secondary_y=False)
+        fig.add_trace(go.Scatter(x=plot_df["date"], y=rolling, mode="lines", name=f"{rolling_window}-day rolling discharge", line=dict(color=CHART_COLORS["rolling_mean"], width=2, dash="dot")), secondary_y=False)
 
-    fig.update_yaxes(title_text="Discharge" if normalize else "Discharge (m3/s)", secondary_y=False)
+    discharge_title = "Discharge" if normalize else "Discharge (m3/s)"
+    if discharge_axis_type == "log":
+        discharge_title = f"{discharge_title}, log scale"
+    fig.update_yaxes(title_text=discharge_title, type=discharge_axis_type, secondary_y=False)
     fig.update_yaxes(title_text="Rainfall" if normalize else "Rainfall (mm/day)", autorange="reversed", secondary_y=True)
-    fig.update_layout(title="Rainfall and Spring Discharge Time Series", height=520, hovermode="x unified", template="plotly_white")
+    title = "Rainfall and Spring Discharge Time Series"
+    if discharge_axis_type == "log":
+        title = "Rainfall and Spring Discharge Time Series (Log Discharge Axis)"
+    fig.update_layout(title=title, height=560, hovermode="x unified", template="plotly_white")
     return fig
 
 
 def plot_lag(lag_df: pd.DataFrame) -> go.Figure:
     """Create interactive lag correlation figure."""
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=lag_df["lag_days"], y=lag_df["correlation"], mode="lines+markers", name="Lag correlation", line=dict(color="#047857", width=2)))
-    fig.add_hline(y=0, line_width=1, line_color="#6B7280")
-    fig.update_layout(title="Lagged Rainfall-Discharge Correlation", xaxis_title="Rainfall lag (days)", yaxis_title="Pearson correlation", height=460, template="plotly_white")
+    fig.add_trace(go.Scatter(x=lag_df["lag_days"], y=lag_df["correlation"], mode="lines+markers", name="Lag correlation", line=dict(color=CHART_COLORS["lag_correlation"], width=2)))
+    fig.add_hline(y=0, line_width=1, line_color=CHART_COLORS["reference_line"])
+    fig.update_layout(title="Lagged Rainfall-Discharge Correlation", xaxis_title="Rainfall lag (days)", yaxis_title="Pearson correlation", height=500, template="plotly_white")
     return fig
 
 
@@ -303,16 +387,16 @@ def plot_scatter(df: pd.DataFrame, normalize: bool) -> go.Figure:
     x = normalized_series(df["rainfall_mm"]) if normalize else df["rainfall_mm"]
     y = normalized_series(df["spring_discharge_m3s"]) if normalize else df["spring_discharge_m3s"]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=y, mode="markers", marker=dict(color="#7C3AED", size=8, opacity=0.65), text=df["date"].dt.strftime("%Y-%m-%d"), name="Daily observations"))
-    fig.update_layout(title="Rainfall vs Discharge", xaxis_title="Rainfall" if normalize else "Rainfall (mm/day)", yaxis_title="Discharge" if normalize else "Discharge (m3/s)", height=460, template="plotly_white")
+    fig.add_trace(go.Scatter(x=x, y=y, mode="markers", marker=dict(color=CHART_COLORS["scatter_points"], size=8, opacity=0.65), text=df["date"].dt.strftime("%Y-%m-%d"), name="Daily observations"))
+    fig.update_layout(title="Rainfall vs Discharge", xaxis_title="Rainfall" if normalize else "Rainfall (mm/day)", yaxis_title="Discharge" if normalize else "Discharge (m3/s)", height=500, template="plotly_white")
     return fig
 
 
 def plot_distribution(df: pd.DataFrame) -> go.Figure:
     """Create discharge histogram figure."""
     fig = go.Figure()
-    fig.add_trace(go.Histogram(x=df["spring_discharge_m3s"], nbinsx=30, marker_color="#B45309", name="Discharge"))
-    fig.update_layout(title="Spring Discharge Distribution", xaxis_title="Discharge (m3/s)", yaxis_title="Frequency", height=460, template="plotly_white")
+    fig.add_trace(go.Histogram(x=df["spring_discharge_m3s"], nbinsx=30, marker_color=CHART_COLORS["discharge"], name="Discharge"))
+    fig.update_layout(title="Spring Discharge Distribution", xaxis_title="Discharge (m3/s)", yaxis_title="Frequency", height=500, template="plotly_white")
     return fig
 
 
@@ -320,24 +404,24 @@ def plot_rolling(df: pd.DataFrame, rolling_window: int) -> go.Figure:
     """Create rolling mean discharge figure."""
     rolling = df["spring_discharge_m3s"].rolling(rolling_window, min_periods=1).mean()
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["date"], y=df["spring_discharge_m3s"], mode="lines", name="Daily discharge", line=dict(color="#9CA3AF", width=1)))
-    fig.add_trace(go.Scatter(x=df["date"], y=rolling, mode="lines", name=f"{rolling_window}-day rolling mean", line=dict(color="#0F766E", width=3)))
-    fig.update_layout(title="Rolling Mean Spring Discharge", xaxis_title="Date", yaxis_title="Discharge (m3/s)", height=460, hovermode="x unified", template="plotly_white")
+    fig.add_trace(go.Scatter(x=df["date"], y=df["spring_discharge_m3s"], mode="lines", name="Daily discharge", line=dict(color=CHART_COLORS["raw_discharge"], width=1)))
+    fig.add_trace(go.Scatter(x=df["date"], y=rolling, mode="lines", name=f"{rolling_window}-day rolling mean", line=dict(color=CHART_COLORS["rolling_mean"], width=3)))
+    fig.update_layout(title="Rolling Mean Spring Discharge", xaxis_title="Date", yaxis_title="Discharge (m3/s)", height=500, hovermode="x unified", template="plotly_white")
     return fig
 
 
 def plot_peaks(df: pd.DataFrame, rainfall_events: pd.DataFrame, discharge_peaks: pd.DataFrame) -> go.Figure:
     """Create peak event figure with rainfall and discharge markers."""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_bar(x=df["date"], y=df["rainfall_mm"], name="Rainfall", marker_color="#3B82A6", opacity=0.35, secondary_y=True)
-    fig.add_trace(go.Scatter(x=df["date"], y=df["spring_discharge_m3s"], mode="lines", name="Discharge", line=dict(color="#B45309", width=2)), secondary_y=False)
+    fig.add_bar(x=df["date"], y=df["rainfall_mm"], name="Rainfall", marker_color=CHART_COLORS["rainfall"], opacity=0.35, secondary_y=True)
+    fig.add_trace(go.Scatter(x=df["date"], y=df["spring_discharge_m3s"], mode="lines", name="Discharge", line=dict(color=CHART_COLORS["discharge"], width=2)), secondary_y=False)
     if not rainfall_events.empty:
-        fig.add_trace(go.Scatter(x=rainfall_events["date"], y=rainfall_events["rainfall_mm"], mode="markers", name="Rainfall peaks", marker=dict(color="#1D4ED8", size=11, symbol="triangle-down")), secondary_y=True)
+        fig.add_trace(go.Scatter(x=rainfall_events["date"], y=rainfall_events["rainfall_mm"], mode="markers", name="Rainfall peaks", marker=dict(color=CHART_COLORS["rainfall_peak"], size=11, symbol="triangle-down")), secondary_y=True)
     if not discharge_peaks.empty:
-        fig.add_trace(go.Scatter(x=discharge_peaks["date"], y=discharge_peaks["spring_discharge_m3s"], mode="markers", name="Discharge peaks", marker=dict(color="#DC2626", size=11, symbol="circle")), secondary_y=False)
+        fig.add_trace(go.Scatter(x=discharge_peaks["date"], y=discharge_peaks["spring_discharge_m3s"], mode="markers", name="Discharge peaks", marker=dict(color=CHART_COLORS["discharge_peak"], size=11, symbol="circle")), secondary_y=False)
     fig.update_yaxes(title_text="Discharge (m3/s)", secondary_y=False)
     fig.update_yaxes(title_text="Rainfall (mm/day)", autorange="reversed", secondary_y=True)
-    fig.update_layout(title="Peak Rainfall and Discharge Events", height=520, hovermode="x unified", template="plotly_white")
+    fig.update_layout(title="Peak Rainfall and Discharge Events", height=560, hovermode="x unified", template="plotly_white")
     return fig
 
 
@@ -367,25 +451,20 @@ def figure_download_controls(fig: go.Figure, stem: str) -> None:
 
 def show_home() -> None:
     """Render app intro."""
-    st.title("Karst Rainfall-Response Analysis")
-    st.write(
-        "A clean exploratory interface for analysing rainfall, lagged spring discharge response, "
-        "peak events, and correlation patterns in karst hydrogeology datasets."
-    )
-    st.info(
-        "This tool supports hydrogeological decision support and data exploration; it does not produce definitive model results by itself."
-    )
+    st.title(UI_TEXT["app_title"])
+    st.write(UI_TEXT["app_intro"])
+    st.info(UI_TEXT["decision_support_note"])
     flow_cols = st.columns(5)
     for col, label in zip(
         flow_cols,
-        ["1. Load data", "2. Map columns", "3. Run analysis", "4. Review results", "5. Download report"],
+        UI_TEXT["workflow_steps"],
     ):
         col.markdown(f"**{label}**")
 
 
 def sidebar_controls(raw_df: pd.DataFrame) -> dict[str, Any]:
     """Render sidebar column mapping and analysis controls."""
-    st.sidebar.header("Column mapping")
+    st.sidebar.header(UI_TEXT["column_mapping"])
     columns = raw_df.columns.tolist()
 
     inferred_date = infer_column(columns, ["date", "time"])
@@ -393,34 +472,39 @@ def sidebar_controls(raw_df: pd.DataFrame) -> dict[str, Any]:
     inferred_discharge = infer_column(columns, ["discharge", "flow", "spring"])
     inferred_temp = infer_column(columns, ["temperature", "temp"])
 
-    date_col = st.sidebar.selectbox("Date column", columns, index=columns.index(inferred_date) if inferred_date in columns else 0)
-    rainfall_col = st.sidebar.selectbox("Rainfall column", columns, index=columns.index(inferred_rain) if inferred_rain in columns else 0)
-    discharge_col = st.sidebar.selectbox("Discharge column", columns, index=columns.index(inferred_discharge) if inferred_discharge in columns else 0)
+    date_col = st.sidebar.selectbox(UI_TEXT["date_column"], columns, index=columns.index(inferred_date) if inferred_date in columns else 0)
+    rainfall_col = st.sidebar.selectbox(UI_TEXT["rainfall_column"], columns, index=columns.index(inferred_rain) if inferred_rain in columns else 0)
+    discharge_col = st.sidebar.selectbox(UI_TEXT["discharge_column"], columns, index=columns.index(inferred_discharge) if inferred_discharge in columns else 0)
     temperature_options = ["None"] + columns
     temperature_col = st.sidebar.selectbox(
-        "Temperature column optional",
+        UI_TEXT["temperature_column"],
         temperature_options,
         index=temperature_options.index(inferred_temp) if inferred_temp in temperature_options else 0,
     )
 
-    st.sidebar.header("Preprocessing")
+    st.sidebar.header(UI_TEXT["preprocessing"])
     cleaning_method = st.sidebar.radio(
-        "Missing value handling",
+        UI_TEXT["missing_value_handling"],
         ["Linear interpolation", "Drop missing rows", "Forward fill"],
         index=0,
     )
 
-    st.sidebar.header("Analysis settings")
-    max_lag_days = st.sidebar.slider("Maximum lag days", min_value=3, max_value=60, value=14)
-    rainfall_percentile = st.sidebar.slider("Rainfall peak percentile", min_value=70.0, max_value=99.0, value=90.0, step=1.0)
-    use_auto_prominence = st.sidebar.checkbox("Auto discharge peak prominence", value=True)
+    st.sidebar.header(UI_TEXT["analysis_settings"])
+    max_lag_days = st.sidebar.slider(UI_TEXT["max_lag_days"], min_value=3, max_value=60, value=14)
+    rainfall_percentile = st.sidebar.slider(UI_TEXT["rainfall_peak_percentile"], min_value=70.0, max_value=99.0, value=90.0, step=1.0)
+    use_auto_prominence = st.sidebar.checkbox(UI_TEXT["auto_discharge_peak_prominence"], value=True)
     discharge_prominence = None
     if not use_auto_prominence:
-        discharge_prominence = st.sidebar.number_input("Minimum discharge peak prominence", min_value=0.0, value=0.5, step=0.1)
-    peak_distance_days = st.sidebar.slider("Minimum distance between discharge peaks", min_value=1, max_value=30, value=3)
-    rolling_window = st.sidebar.slider("Rolling average window days", min_value=1, max_value=30, value=7)
-    show_rolling = st.sidebar.checkbox("Show rolling average on time series", value=True)
-    normalize = st.sidebar.checkbox("Normalize rainfall/discharge in selected charts", value=False)
+        discharge_prominence = st.sidebar.number_input(UI_TEXT["minimum_discharge_peak_prominence"], min_value=0.0, value=0.5, step=0.1)
+    peak_distance_days = st.sidebar.slider(UI_TEXT["minimum_distance_between_peaks"], min_value=1, max_value=30, value=3)
+    rolling_window = st.sidebar.slider(UI_TEXT["rolling_average_window"], min_value=1, max_value=30, value=7)
+    show_rolling = st.sidebar.checkbox(UI_TEXT["show_rolling_average"], value=True)
+    normalize = st.sidebar.checkbox(UI_TEXT["normalize_charts"], value=False)
+    plot_mode_label = st.sidebar.selectbox(
+        UI_TEXT["plot_interaction_mode"],
+        list(PLOT_DRAG_MODES.keys()),
+        index=0,
+    )
 
     return {
         "date_col": date_col,
@@ -435,15 +519,16 @@ def sidebar_controls(raw_df: pd.DataFrame) -> dict[str, Any]:
         "rolling_window": rolling_window,
         "show_rolling": show_rolling,
         "normalize": normalize,
+        "plot_dragmode": PLOT_DRAG_MODES[plot_mode_label],
     }
 
 
 initialize_state()
 show_home()
 
-st.sidebar.header("Data source")
-uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
-use_sample = st.sidebar.button("Load sample dataset", width="stretch")
+st.sidebar.header(UI_TEXT["data_source"])
+uploaded_file = st.sidebar.file_uploader(UI_TEXT["upload_csv"], type=["csv"])
+use_sample = st.sidebar.button(UI_TEXT["load_sample_dataset"], width="stretch")
 
 sample_df = sample_dataframe()
 download_sample_df = sample_df.rename(
@@ -453,14 +538,14 @@ download_sample_df = sample_df.rename(
     }
 )
 st.sidebar.download_button(
-    "Download sample CSV",
+    UI_TEXT["download_sample_csv"],
     data=dataframe_to_csv_bytes(download_sample_df),
     file_name="synthetic_karst_timeseries.csv",
     mime="text/csv",
     width="stretch",
 )
 
-with st.expander("Example CSV format", expanded=False):
+with st.expander(UI_TEXT["example_csv_format"], expanded=False):
     st.dataframe(download_sample_df.head(5), width="stretch")
 
 if uploaded_file is not None:
@@ -476,27 +561,27 @@ elif use_sample or st.session_state.raw_df is None:
 raw_df = st.session_state.raw_df
 
 if raw_df is None or raw_df.empty:
-    st.warning("Load a CSV file or use the sample dataset to begin.")
+    st.warning(UI_TEXT["load_data_to_begin"])
     st.stop()
 
 controls = sidebar_controls(raw_df)
 
-st.subheader("Data Preview")
-source_label = "Uploaded CSV" if st.session_state.data_source == "uploaded" else "Synthetic sample dataset"
-st.caption(f"Current source: {source_label}")
+st.subheader(UI_TEXT["data_preview"])
+source_label = UI_TEXT["uploaded_csv"] if st.session_state.data_source == "uploaded" else UI_TEXT["sample_dataset"]
+st.caption(f"{UI_TEXT['current_source']}: {source_label}")
 st.dataframe(raw_df.head(10), width="stretch")
 
 missing_report = raw_df.isna().sum().rename("missing_count").reset_index().rename(columns={"index": "column"})
 col_missing, col_shape, col_parse = st.columns(3)
-col_shape.metric("Rows", f"{len(raw_df):,}")
-col_shape.metric("Columns", f"{len(raw_df.columns):,}")
-col_missing.metric("Missing cells", f"{int(raw_df.isna().sum().sum()):,}")
+col_shape.metric(UI_TEXT["rows"], f"{len(raw_df):,}")
+col_shape.metric(UI_TEXT["columns"], f"{len(raw_df.columns):,}")
+col_missing.metric(UI_TEXT["missing_cells"], f"{int(raw_df.isna().sum().sum()):,}")
 
 date_preview = pd.to_datetime(raw_df[controls["date_col"]], errors="coerce")
 parse_rate = date_preview.notna().mean() * 100
-col_parse.metric("Date parse success", f"{parse_rate:.1f}%")
+col_parse.metric(UI_TEXT["date_parse_success"], f"{parse_rate:.1f}%")
 
-with st.expander("Missing value report", expanded=False):
+with st.expander(UI_TEXT["missing_value_report"], expanded=False):
     st.dataframe(missing_report, width="stretch")
 
 try:
@@ -511,10 +596,10 @@ except Exception as exc:
     st.error(f"Column mapping failed: {exc}")
     st.stop()
 
-negative_rain = int((mapped_df["rainfall_mm"] < 0).sum())
+trace_rain = int((mapped_df["rainfall_mm"] < 1.0).sum())
 negative_discharge = int((mapped_df["spring_discharge_m3s"] < 0).sum())
-if negative_rain:
-    st.warning(f"{negative_rain} negative rainfall value(s) detected. Cleaning clips rainfall at zero.")
+if trace_rain:
+    st.warning(f"{trace_rain} rainfall value(s) below 1.0 mm detected. Cleaning sets them to zero.")
 if negative_discharge:
     st.warning(f"{negative_discharge} negative discharge value(s) detected. Cleaning clips discharge at zero.")
 if not mapped_df["date"].is_monotonic_increasing:
@@ -527,21 +612,21 @@ if clean_df.empty:
 
 date_min = clean_df["date"].min().date()
 date_max = clean_df["date"].max().date()
-selected_range = st.sidebar.date_input("Date range", value=(date_min, date_max), min_value=date_min, max_value=date_max)
+selected_range = st.sidebar.date_input(UI_TEXT["date_range"], value=(date_min, date_max), min_value=date_min, max_value=date_max)
 if isinstance(selected_range, tuple) and len(selected_range) == 2:
     clean_df = filter_date_range(clean_df, pd.Timestamp(selected_range[0]), pd.Timestamp(selected_range[1]))
 
 if len(clean_df) < controls["max_lag_days"] + 5:
     st.warning("The selected date range is short relative to the maximum lag. Consider reducing max lag days.")
 
-st.subheader("Preprocessing Check")
+st.subheader(UI_TEXT["preprocessing_check"])
 check_cols = st.columns(4)
-check_cols[0].metric("Clean rows", f"{len(clean_df):,}")
-check_cols[1].metric("Start date", str(clean_df["date"].min().date()))
-check_cols[2].metric("End date", str(clean_df["date"].max().date()))
-check_cols[3].metric("Remaining missing", f"{int(clean_df.isna().sum().sum()):,}")
+check_cols[0].metric(UI_TEXT["clean_rows"], f"{len(clean_df):,}")
+check_cols[1].metric(UI_TEXT["start_date"], str(clean_df["date"].min().date()))
+check_cols[2].metric(UI_TEXT["end_date"], str(clean_df["date"].max().date()))
+check_cols[3].metric(UI_TEXT["remaining_missing"], f"{int(clean_df.isna().sum().sum()):,}")
 
-run_clicked = st.button("Run rainfall-discharge analysis", type="primary", width="stretch")
+run_clicked = st.button(UI_TEXT["run_analysis"], type="primary", width="stretch")
 if run_clicked:
     try:
         st.session_state.clean_df = clean_df
@@ -561,12 +646,12 @@ if run_clicked:
             "cleaning_method": controls["cleaning_method"],
             "date_range": f"{clean_df['date'].min().date()} to {clean_df['date'].max().date()}",
         }
-        st.success("Analysis completed.")
+        st.success(UI_TEXT["analysis_completed"])
     except Exception as exc:
         st.error(f"Analysis could not be completed: {exc}")
 
 if st.session_state.analysis is None:
-    st.info("Set the data and analysis options, then press the analysis button.")
+    st.info(UI_TEXT["ready_to_analyze"])
     st.stop()
 
 analysis = st.session_state.analysis
@@ -574,59 +659,72 @@ clean_df = st.session_state.clean_df
 metrics = analysis["metrics"]
 interpretation = hydrogeology_interpretation(metrics)
 
-st.subheader("Result Dashboard")
+st.subheader(UI_TEXT["result_dashboard"])
 metric_cols = st.columns(8)
-metric_cols[0].metric("Total rainfall", f"{metrics['total_rainfall_mm']:.1f} mm")
-metric_cols[1].metric("Mean discharge", f"{metrics['mean_discharge_m3s']:.3f}")
-metric_cols[2].metric("Max discharge", f"{metrics['max_discharge_m3s']:.3f}")
-metric_cols[3].metric("Min discharge", f"{metrics['min_discharge_m3s']:.3f}")
-metric_cols[4].metric("Estimated lag", f"{metrics['estimated_lag_days']} d")
-metric_cols[5].metric("Best corr.", f"{metrics['estimated_lag_correlation']:.3f}")
-metric_cols[6].metric("Rain peaks", str(metrics["rainfall_peak_count"]))
-metric_cols[7].metric("Q peaks", str(metrics["discharge_peak_count"]))
+metric_cols[0].metric(UI_TEXT["total_rainfall"], f"{metrics['total_rainfall_mm']:.1f} mm")
+metric_cols[1].metric(UI_TEXT["mean_discharge"], f"{metrics['mean_discharge_m3s']:.3f}")
+metric_cols[2].metric(UI_TEXT["max_discharge"], f"{metrics['max_discharge_m3s']:.3f}")
+metric_cols[3].metric(UI_TEXT["min_discharge"], f"{metrics['min_discharge_m3s']:.3f}")
+metric_cols[4].metric(UI_TEXT["estimated_lag"], f"{metrics['estimated_lag_days']} d")
+metric_cols[5].metric(UI_TEXT["best_correlation"], f"{metrics['estimated_lag_correlation']:.3f}")
+metric_cols[6].metric(UI_TEXT["rainfall_peaks"], str(metrics["rainfall_peak_count"]))
+metric_cols[7].metric(UI_TEXT["discharge_peaks_short"], str(metrics["discharge_peak_count"]))
 
-tabs = st.tabs(["Time Series", "Lag Analysis", "Scatter", "Distribution", "Peaks", "Report"])
+tabs = st.tabs(UI_TEXT["tabs"])
 
 with tabs[0]:
     fig = plot_time_series(clean_df, controls["rolling_window"], controls["show_rolling"], controls["normalize"])
-    st.plotly_chart(fig, width="stretch")
+    show_plotly_figure(fig, "time_series", controls["plot_dragmode"])
     figure_download_controls(fig, "time_series")
 
 with tabs[1]:
+    fig = plot_time_series(
+        clean_df,
+        controls["rolling_window"],
+        controls["show_rolling"],
+        controls["normalize"],
+        discharge_axis_type="log",
+    )
+    if (clean_df["spring_discharge_m3s"] <= 0).any() or controls["normalize"]:
+        st.caption("Non-positive plotted discharge values are hidden on the log axis.")
+    show_plotly_figure(fig, "time_series_log_y", controls["plot_dragmode"])
+    figure_download_controls(fig, "time_series_log_y")
+
+with tabs[2]:
     fig = plot_lag(analysis["lag_df"])
-    st.plotly_chart(fig, width="stretch")
+    show_plotly_figure(fig, "lag_correlation", controls["plot_dragmode"])
     st.dataframe(analysis["lag_df"], width="stretch")
     figure_download_controls(fig, "lag_correlation")
 
-with tabs[2]:
+with tabs[3]:
     fig = plot_scatter(clean_df, controls["normalize"])
-    st.plotly_chart(fig, width="stretch")
+    show_plotly_figure(fig, "rainfall_discharge_scatter", controls["plot_dragmode"])
     figure_download_controls(fig, "rainfall_discharge_scatter")
 
-with tabs[3]:
+with tabs[4]:
     fig = plot_distribution(clean_df)
-    st.plotly_chart(fig, width="stretch")
+    show_plotly_figure(fig, "discharge_histogram", controls["plot_dragmode"])
     rolling_fig = plot_rolling(clean_df, controls["rolling_window"])
-    st.plotly_chart(rolling_fig, width="stretch")
+    show_plotly_figure(rolling_fig, "rolling_discharge", controls["plot_dragmode"])
     figure_download_controls(fig, "discharge_histogram")
     figure_download_controls(rolling_fig, "rolling_discharge")
 
-with tabs[4]:
+with tabs[5]:
     fig = plot_peaks(clean_df, analysis["rainfall_events"], analysis["discharge_peaks"])
-    st.plotly_chart(fig, width="stretch")
+    show_plotly_figure(fig, "peak_events", controls["plot_dragmode"])
     col_left, col_right = st.columns(2)
     with col_left:
-        st.markdown("**Rainfall peak events**")
+        st.markdown(f"**{UI_TEXT['rainfall_peak_events']}**")
         st.dataframe(analysis["rainfall_events"], width="stretch")
     with col_right:
-        st.markdown("**Discharge peak events**")
+        st.markdown(f"**{UI_TEXT['discharge_peak_events']}**")
         st.dataframe(analysis["discharge_peaks"], width="stretch")
     figure_download_controls(fig, "peak_events")
 
-with tabs[5]:
-    st.markdown("### Hydrogeological Interpretation")
+with tabs[6]:
+    st.markdown(f"### {UI_TEXT['hydrogeological_interpretation']}")
     st.write(interpretation)
-    st.caption("Interpretations are cautious exploratory statements, not definitive model conclusions.")
+    st.caption(UI_TEXT["interpretation_caption"])
 
     report_md = build_markdown_report(clean_df, analysis, st.session_state.params, interpretation)
     report_html = markdown_to_html(report_md)
@@ -643,5 +741,5 @@ with tabs[5]:
     export_cols_2[1].download_button("Markdown report", report_md.encode("utf-8"), "karst_analysis_report.md", "text/markdown", width="stretch")
     export_cols_2[2].download_button("HTML report", report_html.encode("utf-8"), "karst_analysis_report.html", "text/html", width="stretch")
 
-    with st.expander("Report preview", expanded=True):
+    with st.expander(UI_TEXT["report_preview"], expanded=True):
         st.markdown(report_md)

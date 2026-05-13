@@ -14,7 +14,7 @@ def clean_timeseries(df: pd.DataFrame) -> pd.DataFrame:
     for column in numeric_columns:
         cleaned[column] = pd.to_numeric(cleaned[column], errors="coerce")
 
-    cleaned["rainfall_mm"] = cleaned["rainfall_mm"].clip(lower=0)
+    cleaned.loc[cleaned["rainfall_mm"] < 1.0, "rainfall_mm"] = 0.0
     cleaned["spring_discharge_m3s"] = cleaned["spring_discharge_m3s"].clip(lower=0)
     cleaned[numeric_columns] = cleaned[numeric_columns].interpolate(limit_direction="both")
 
