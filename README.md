@@ -2,96 +2,97 @@
 
 **Prepared by:** Arda Melih Cetin
 
-This Python-based MVP project is designed to explore, visualize, and report spring discharge response after rainfall events in karst hydrogeology datasets.
+A modular Python toolkit and Streamlit application for exploring, visualizing, and reporting spring discharge response to rainfall events in karst hydrogeology datasets.
 
-This project is not a full physical hydrogeological model. Synthetic data generation and correlation analyses are included to test the workflow and provide a starting point for using real ERA5 rainfall data and spring discharge CSV files. Results should not be interpreted as proof of causality or as definitive field-scale karst system parameters.
+> This project supports hydrogeological decision support and exploratory analysis. Synthetic data and correlation metrics should not be interpreted as definitive physical model results or proof of causality.
 
-## Features
+## Key Features
 
-- Upload CSV files or use a built-in synthetic sample dataset
-- Map different input column names to the application's standard schema
-- Handle missing values with linear interpolation, forward fill, or row removal
-- Clean rainfall, temperature, and spring discharge time series
-- Calculate same-day rainfall-discharge correlation
-- Estimate rainfall-response lag using lagged correlation analysis
-- Detect high rainfall events and discharge peaks
-- Generate interactive Plotly charts
-- Download cleaned data, lag results, summary metrics, and reports
-- Convert ERA5 and spring discharge CSV files into the application input format
+- **Data Ingestion & Preprocessing:** Upload CSV files or load a synthetic sample dataset, map custom column names, and handle missing values (`Linear interpolation`, `Forward fill`, `Drop missing rows`).
+- **Core Hydrological Analysis:** Same-day correlation, lagged rainfall-discharge correlation, high rainfall event detection, and spring discharge peak detection.
+- **Central Cosmetic Configuration (`config/plot_config.yaml`):** Every color, line width/style, marker shape/size, opacity, font family/size, figure dimension, DPI, grid, legend, and axis label for both static Matplotlib figures and interactive Streamlit charts lives in one YAML config file.
+- **High-Performance Interactive Charts:** GPU-accelerated Plotly WebGL (`Scattergl`) with peak-preserving **LTTB downsampling**, WebGL rainfall stems, `@st.cache_data`, and lazy HTML/PNG exports for smooth 60 FPS zoom/pan on multi-decade daily series.
+- **Live Cosmetic Sidebar:** Adjust colors, line/marker styles, typography, layout, and performance thresholds live in Streamlit and export/import your settings as YAML or JSON.
+- **Google Colab Ready:** Clean `requirements-colab.txt` and one-click `notebooks/colab_runner.ipynb`.
 
 ## Project Structure
 
 ```text
-karst-rainfall-response-analysis/
+Karst-Rainfall-Response-Analysis/
 |-- app/
-|   `-- streamlit_app.py
+|   `-- streamlit_app.py         # Modular Streamlit UI + live cosmetic sidebar
+|-- config/
+|   `-- plot_config.yaml         # Central cosmetic & performance config
 |-- data/
-|   |-- raw/
-|   |-- processed/
 |   `-- sample/
 |-- notebooks/
-|-- outputs/
-|   |-- figures/
-|   `-- reports/
+|   |-- 01_exploratory_analysis.ipynb
+|   `-- colab_runner.ipynb       # One-click Google Colab runner
 |-- packaging/
+|   `-- windows/
 |-- scripts/
-|   `-- prepare_karst_input.py
+|   `-- prepare_karst_input.py   # ERA5 + spring discharge CSV merger
 |-- src/
-|   |-- analysis.py
-|   |-- data_loader.py
-|   |-- preprocessing.py
-|   |-- synthetic_data.py
-|   `-- visualization.py
-|-- main.py
-|-- requirements.txt
+|   |-- analysis.py              # Correlations, lag estimation, peak detection
+|   |-- data_loader.py           # CSV I/O and column mapping
+|   |-- downsampling.py          # Peak-preserving LTTB + WebGL stem builder
+|   |-- interactive_charts.py    # WebGL Plotly figure builders (config-driven)
+|   |-- plot_config.py           # YAML/JSON config loader & style mappers
+|   |-- preprocessing.py         # Cleaning, filtering, normalization
+|   |-- reporting.py             # Hydrogeological interpretation & MD/HTML reports
+|   |-- synthetic_data.py        # Synthetic daily karst generator
+|   |-- ui_config.py             # UI text strings
+|   `-- visualization.py         # Static publication-quality Matplotlib figures
+|-- main.py                      # CLI runner for static figures & summary
+|-- requirements.txt             # Full local + Windows build dependencies
+|-- requirements-colab.txt       # Lightweight dependencies for Google Colab / Linux
 `-- README.md
 ```
 
 ## Installation
 
-Windows PowerShell:
-
-```powershell
-cd "karst-rainfall-response-analysis"
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-macOS/Linux:
+### Local (Windows / macOS / Linux)
 
 ```bash
-cd karst-rainfall-response-analysis
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements-colab.txt   # or requirements.txt for Windows packaging
 ```
 
-## Running the App
+### Google Colab
 
-Start the Streamlit interface:
+Open `notebooks/colab_runner.ipynb` in Google Colab, mount Drive or clone the repository, install `requirements-colab.txt`, customize `config/plot_config.yaml`, and generate static figures or launch Streamlit.
 
-```powershell
-streamlit run app\streamlit_app.py
-```
+## Running the Project
 
-The browser usually opens at:
+### Command-Line Static Analysis & Figures
 
-```text
-http://localhost:8501
-```
-
-Run the command-line sample analysis:
-
-```powershell
+```bash
 python main.py
 ```
 
-This command generates synthetic daily data, runs the core analyses, and saves figures under `outputs/figures/`.
+Optional flags:
+
+```bash
+python main.py --input data/processed/my_spring.csv --config config/plot_config.yaml --max-lag 21 --formats png pdf
+```
+
+Figures are saved under `outputs/figures/` using the DPI, dimensions, colors, and typography defined in `config/plot_config.yaml`:
+- `rainfall_discharge_timeseries.png`
+- `rainfall_discharge_timeseries_log_y.png`
+- `lag_correlation.png`
+- `rainfall_discharge_scatter.png`
+- `discharge_histogram.png`
+- `peak_events.png`
+
+### Interactive Streamlit App
+
+```bash
+streamlit run app/streamlit_app.py
+```
 
 ## Expected CSV Format
-
-The application expects one CSV file with these columns:
 
 ```csv
 date,rainfall_mm,mean_temperature_C,spring_discharge_m3s
@@ -99,96 +100,12 @@ date,rainfall_mm,mean_temperature_C,spring_discharge_m3s
 2022-01-02,0.0,7.5,1.41
 ```
 
-Column meanings:
-
-| Column | Description |
-| --- | --- |
-| `date` | Daily date |
-| `rainfall_mm` | Daily total rainfall in mm/day |
-| `mean_temperature_C` | Daily mean air temperature in degrees Celsius |
-| `spring_discharge_m3s` | Spring discharge in m3/s |
-
 ## Preparing ERA5 and Discharge CSV Files
 
-If the ERA5 file contains `time`, `precipitation_mm`, and `tmean_C`, and the discharge file contains metadata rows followed by a `Date;Discharge (L/s)` table, use:
-
-```powershell
-python scripts\prepare_karst_input.py --era5 "path\to\Schwarzbach_daily_2003_2022_MERGED.csv" --discharge "path\to\ALP_40_AT@Ursprungquelle.csv" --output "data\processed\ALP_40_AT_Ursprungquelle_karst_input.csv" --join left
+```bash
+python scripts/prepare_karst_input.py \
+  --era5 "path/to/ERA5_daily.csv" \
+  --discharge "path/to/spring_discharge.csv" \
+  --output "data/processed/karst_input.csv" \
+  --join left
 ```
-
-The script:
-
-- Skips metadata rows in the discharge file
-- Parses the `Date` column
-- Converts `Discharge (L/s)` to numeric values
-- Removes non-numeric discharge annotation rows
-- Converts discharge from L/s to m3/s
-- Merges ERA5 and discharge data by `date`
-- Writes a single CSV file that the app can read
-
-The output file contains:
-
-```text
-date,rainfall_mm,mean_temperature_C,spring_discharge_m3s
-```
-
-If your column names differ, pass them explicitly:
-
-```powershell
---era5-date-column "time"
---rainfall-column "precipitation_mm"
---temperature-column "tmean_C"
---discharge-date-column "Date"
---discharge-column "Discharge (L/s)"
-```
-
-If discharge dates use month-first formatting, for example `01/31/2003`, add:
-
-```powershell
---discharge-month-first
-```
-
-## Hydrogeological Meaning
-
-- Total rainfall summarizes water input during the selected period.
-- Mean and maximum discharge provide a first view of general spring flow conditions and peak response.
-- Same-day rainfall-discharge correlation shows the linear relationship between rainfall and discharge on the same day.
-- Lag correlation estimates how many days after rainfall the spring discharge response is strongest.
-- Rainfall events and discharge peaks identify candidate recharge-response periods.
-- Rolling average charts smooth short-term discharge variability and make broader trends easier to inspect.
-
-These analyses are exploratory. Field interpretation should also consider geology, aquifer geometry, measurement uncertainty, evapotranspiration, snowmelt, water abstraction, and data quality.
-
-## Outputs
-
-The Streamlit interface can export:
-
-- Cleaned data CSV
-- Lag correlation results CSV
-- Summary metrics CSV
-- Summary metrics JSON
-- Markdown report
-- HTML report
-- Chart outputs as HTML or PNG
-
-The command-line analysis saves these figures under `outputs/figures/`:
-
-- `rainfall_discharge_timeseries.png`
-- `lag_correlation.png`
-- `rainfall_discharge_scatter.png`
-- `discharge_histogram.png`
-
-## Windows Desktop App
-
-Windows PyInstaller launcher and Inno Setup installer files are stored under `packaging/windows/`. To build the installer:
-
-```bat
-pip install -r requirements.txt
-packaging\windows\build_windows.bat
-```
-
-Then compile `packaging/windows/installer.iss` with Inno Setup to create `setup.exe`. See `packaging/windows/README_WINDOWS.md` for details.
-
-## Note
-
-This tool is intended for hydrogeological decision support, exploratory analysis, and visualization. It does not produce definitive model results by itself.

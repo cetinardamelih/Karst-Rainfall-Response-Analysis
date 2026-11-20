@@ -1,0 +1,9 @@
+# Clean dependencies for Google Colab / Linux / macOS (excludes Windows packaging tools)
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+plotly>=5.20
+pyyaml>=6.0
+streamlit>=1.38
+pyarrow>=14.0

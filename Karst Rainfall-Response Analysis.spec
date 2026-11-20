@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('app', 'app'), ('src', 'src'), ('data\\sample', 'data\\sample')]
+datas = [('app', 'app'), ('config', 'config'), ('src', 'src'), ('data\\sample', 'data\\sample')]
 binaries = []
-hiddenimports = ['streamlit.web.cli', 'streamlit.runtime.scriptrunner']
+hiddenimports = ['streamlit.web.cli', 'streamlit.runtime.scriptrunner', 'yaml']
 tmp_ret = collect_all('streamlit')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('altair')

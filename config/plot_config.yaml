@@ -1,0 +1,164 @@
+# =============================================================================
+# Karst Rainfall-Response Analysis - Central Plot & Cosmetic Configuration
+# =============================================================================
+# Both static Matplotlib figures (main.py / src/visualization.py) and
+# interactive Streamlit WebGL charts (app/streamlit_app.py) read all visual
+# styling from this single file. Edit values here or adjust them live in the
+# Streamlit sidebar and download your customized config.
+
+colors:
+  # Core hydrological series (colorblind-friendly Okabe-Ito inspired palette)
+  rainfall: "#0072B2"          # Daily rainfall bars or line
+  rainfall_peak: "#56B4E9"     # Detected high rainfall events
+  discharge: "#D55E00"         # Spring discharge line / histogram
+  discharge_peak: "#CC0000"    # Detected spring discharge peaks
+  temperature: "#E69F00"       # Daily mean air temperature (optional overlay)
+  rolling_mean: "#332288"      # Rolling average discharge line
+  raw_discharge: "#999999"     # Background daily discharge on rolling chart
+
+  # Analytical & reference elements
+  lag_correlation: "#009E73"   # Lagged correlation curve
+  scatter_points: "#882255"    # Rainfall vs. discharge scatter points
+  reference_line: "#666666"    # Zero-correlation and helper lines
+  marker_edge: "#FFFFFF"       # Marker and histogram bar border color
+  annotation_fill: "rgba(204, 0, 0, 0.12)"  # Interactive drawing fill
+
+  # Canvas, grid, and typography colors
+  background: "#FFFFFF"        # Outer figure / page background
+  plot_background: "#FFFFFF"   # Inner axes plotting area background
+  grid: "#CBD5E1"              # Grid line color
+  text: "#1F2933"              # Body, tick, and axis label color
+  heading: "#0F172A"           # Titles and report headings
+  code_background: "#F3F4F6"   # Code block background in HTML reports
+
+styles:
+  # Supported linestyles: solid, dashed, dotted, dashdot
+  # Supported markers: circle, triangle-down, triangle-up, diamond, square, cross, x
+
+  # Rainfall series
+  rainfall_display: "bar"      # "bar" or "line"
+  rainfall_bar_width: 1.0      # Bar width in days (Matplotlib)
+  rainfall_linewidth: 1.4      # Line width when rainfall_display="line" or WebGL stem
+  rainfall_linestyle: "solid"
+  rainfall_alpha: 0.40
+
+  # Spring discharge series
+  discharge_linewidth: 1.8
+  discharge_linestyle: "solid"
+  discharge_alpha: 0.95
+
+  # Air temperature series
+  temperature_linewidth: 1.4
+  temperature_linestyle: "dashed"
+  temperature_alpha: 0.85
+
+  # Rolling mean & raw background discharge
+  rolling_linewidth: 2.2
+  rolling_linestyle: "dotted"
+  rolling_alpha: 0.95
+  raw_discharge_linewidth: 1.0
+  raw_discharge_linestyle: "solid"
+  raw_discharge_alpha: 0.70
+
+  # Lag correlation curve
+  lag_linewidth: 2.0
+  lag_linestyle: "solid"
+  lag_marker: "circle"
+  lag_marker_size: 7
+  lag_alpha: 0.95
+
+  # Scatter plot
+  scatter_marker: "circle"
+  scatter_marker_size: 7
+  scatter_alpha: 0.65
+  scatter_edge_width: 0.4
+
+  # Peak markers
+  rainfall_peak_marker: "triangle-down"
+  rainfall_peak_marker_size: 10
+  rainfall_peak_alpha: 0.95
+  discharge_peak_marker: "diamond"
+  discharge_peak_marker_size: 10
+  discharge_peak_alpha: 0.95
+
+  # Reference lines, histogram, and drawing tools
+  reference_linewidth: 1.0
+  reference_linestyle: "dashed"
+  reference_alpha: 0.60
+  histogram_bins: 30
+  histogram_alpha: 0.85
+  annotation_linewidth: 2.5
+  annotation_alpha: 0.85
+
+typography:
+  font_family: "DejaVu Sans"   # Font family for Matplotlib, Plotly, and HTML reports
+  title_size: 14               # Main plot title font size (pt/px)
+  axis_label_size: 11          # X and Y axis label font size
+  tick_size: 10                # Tick label number/date font size
+  legend_size: 10              # Legend entry font size
+
+layout:
+  # Static Matplotlib figure dimensions in inches [width, height]
+  figsize_timeseries: [12.0, 6.0]
+  figsize_lag: [8.0, 5.0]
+  figsize_scatter: [7.5, 5.5]
+  figsize_histogram: [7.5, 5.5]
+
+  # Interactive Plotly figure heights in pixels
+  interactive_height: 540
+  interactive_compact_height: 460
+
+  # Static export quality and formats (supported: png, pdf, svg)
+  dpi: 200
+  save_formats: ["png"]
+
+  # Grid and legend visibility / placement
+  show_grid: true
+  grid_alpha: 0.35
+  grid_linestyle: "dashed"
+  grid_linewidth: 0.7
+  show_legend: true
+  # Supported legend positions: upper left, upper right, lower left, lower right, top, bottom
+  legend_position: "upper left"
+
+  # Optional series overlays on time series figures
+  show_temperature: false
+  show_peaks_on_timeseries: true
+
+  # Axis labels, chart titles, and legend names
+  labels:
+    date_axis: "Date"
+    rainfall_axis: "Rainfall (mm/day)"
+    rainfall_normalized_axis: "Rainfall (normalized)"
+    discharge_axis: "Spring discharge (m³/s)"
+    discharge_log_axis: "Spring discharge (m³/s, log scale)"
+    discharge_normalized_axis: "Spring discharge (normalized)"
+    temperature_axis: "Mean temperature (°C)"
+    lag_axis: "Rainfall lag (days)"
+    correlation_axis: "Pearson correlation"
+    frequency_axis: "Frequency"
+    timeseries_title: "Karst Rainfall-Discharge Time Series"
+    timeseries_log_title: "Karst Rainfall-Discharge Time Series (Log Discharge Axis)"
+    lag_title: "Lagged Rainfall-Discharge Correlation"
+    scatter_title: "Rainfall-Discharge Scatter Plot"
+    histogram_title: "Spring Discharge Distribution"
+    rolling_title: "Rolling Mean Spring Discharge"
+    peaks_title: "Peak Rainfall and Discharge Events"
+    series_rainfall: "Rainfall"
+    series_discharge: "Discharge"
+    series_temperature: "Temperature"
+    series_rolling: "Rolling mean"
+    series_raw_discharge: "Daily discharge"
+    series_lag: "Lag correlation"
+    series_scatter: "Daily observations"
+    series_rainfall_peaks: "Rainfall peaks"
+    series_discharge_peaks: "Discharge peaks"
+
+performance:
+  # Interactive WebGL & peak-preserving LTTB downsampling settings
+  use_webgl: true                 # Use GPU-accelerated Scattergl for smooth zoom/pan
+  downsample_threshold: 2000      # Apply LTTB when series exceeds this row count
+  downsample_target_points: 1500  # Target point count after LTTB (peaks always preserved)
+  rainfall_stem_threshold: 800    # Switch SVG bars to WebGL vertical stems above this row count
+  show_rangeslider: false         # Keep off for zero-lag zooming on long series
+  export_image_scale: 2           # PNG export multiplier for interactive charts

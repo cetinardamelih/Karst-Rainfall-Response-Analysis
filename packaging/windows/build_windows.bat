@@ -83,8 +83,10 @@ echo Running PyInstaller onedir build...
   --workpath "build\pyinstaller" ^
   --specpath "build\spec" ^
   --add-data "%CD%\app;app" ^
+  --add-data "%CD%\config;config" ^
   --add-data "%CD%\src;src" ^
   --add-data "%CD%\data\sample;data\sample" ^
+  --collect-all yaml ^
   --collect-all streamlit ^
   --collect-all altair ^
   --collect-all pyarrow ^

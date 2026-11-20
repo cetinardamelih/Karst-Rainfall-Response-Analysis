@@ -1,27 +1,11 @@
 from __future__ import annotations
 
-# Edit chart colors here. The palette uses high-contrast, colorblind-friendly
-# tones so rainfall, discharge, peaks, and reference lines stay easy to tell apart.
-CHART_COLORS = {
-    "rainfall": "#0072B2",
-    "rainfall_peak": "#56B4E9",
-    "discharge": "#D55E00",
-    "discharge_peak": "#CC0000",
-    "lag_correlation": "#009E73",
-    "scatter_points": "#882255",
-    "rolling_mean": "#332288",
-    "raw_discharge": "#999999",
-    "reference_line": "#666666",
-    "html_text": "#1F2933",
-    "html_heading": "#0F172A",
-    "code_background": "#F3F4F6",
-}
-
-# Edit visible Streamlit interface text here.
-UI_TEXT = {
+# Visible Streamlit interface text. All chart colors, typography, and styles
+# live in config/plot_config.yaml and are loaded via src/plot_config.py.
+UI_TEXT: dict[str, object] = {
     "app_title": "Karst Rainfall-Response Analysis",
     "app_intro": (
-        "A clean exploratory interface for analysing rainfall, lagged spring discharge response, "
+        "A fast, modular exploratory interface for analysing rainfall, lagged spring discharge response, "
         "peak events, and correlation patterns in karst hydrogeology datasets."
     ),
     "decision_support_note": (
@@ -32,8 +16,8 @@ UI_TEXT = {
         "1. Load data",
         "2. Map columns",
         "3. Run analysis",
-        "4. Review results",
-        "5. Download report",
+        "4. Customize & explore",
+        "5. Export report & config",
     ],
     "column_mapping": "Column mapping",
     "date_column": "Date column",
@@ -52,6 +36,7 @@ UI_TEXT = {
     "show_rolling_average": "Show rolling average on time series",
     "normalize_charts": "Normalize rainfall/discharge in selected charts",
     "plot_interaction_mode": "Plot interaction mode",
+    "cosmetic_panel_title": "Grafik & Kozmetik Ayarları",
     "data_source": "Data source",
     "upload_csv": "Upload CSV",
     "load_sample_dataset": "Load sample dataset",

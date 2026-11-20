@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from src.data_loader import NUMERIC_COLUMNS
 
 try:
     from scipy.signal import find_peaks as scipy_find_peaks
@@ -18,17 +21,22 @@ class AnalysisSummary:
     total_rainfall_mm: float
     mean_discharge_m3s: float
     max_discharge_m3s: float
+    min_discharge_m3s: float
     rainfall_discharge_corr: float
     estimated_lag_days: int
     estimated_lag_corr: float
     rainfall_peak_count: int
     discharge_peak_count: int
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize summary fields as a plain dictionary."""
+        return asdict(self)
+
 
 def basic_statistics(df: pd.DataFrame) -> pd.DataFrame:
-    """Return descriptive statistics for numeric variables."""
-    columns = ["rainfall_mm", "mean_temperature_C", "spring_discharge_m3s"]
-    return df[columns].describe().round(3)
+    """Return descriptive statistics for available numeric variables."""
+    cols = [col for col in NUMERIC_COLUMNS if col in df.columns and df[col].notna().any()]
+    return df[cols].describe().round(3)
 
 
 def rainfall_discharge_correlation(df: pd.DataFrame) -> float:
@@ -38,22 +46,24 @@ def rainfall_discharge_correlation(df: pd.DataFrame) -> float:
 
 
 def lag_correlations(df: pd.DataFrame, max_lag_days: int = 14) -> pd.DataFrame:
-    """Calculate correlations between rainfall and discharge for lagged rainfall."""
+    """Calculate Pearson correlations between lagged rainfall and spring discharge."""
     if max_lag_days < 0:
         raise ValueError("max_lag_days cannot be negative.")
 
-    records: list[dict[str, float | int]] = []
     discharge = df["spring_discharge_m3s"]
-    for lag in range(max_lag_days + 1):
-        lagged_rainfall = df["rainfall_mm"].shift(lag)
-        corr = lagged_rainfall.corr(discharge)
-        records.append({"lag_days": lag, "correlation": float(corr) if pd.notna(corr) else np.nan})
-
+    rainfall = df["rainfall_mm"]
+    records = [
+        {
+            "lag_days": lag,
+            "correlation": float(corr) if pd.notna(corr := rainfall.shift(lag).corr(discharge)) else np.nan,
+        }
+        for lag in range(max_lag_days + 1)
+    ]
     return pd.DataFrame(records)
 
 
 def estimate_lag_time(lag_corr_df: pd.DataFrame) -> tuple[int, float]:
-    """Estimate the most likely response lag as the lag with maximum correlation."""
+    """Estimate response lag as the lag with maximum correlation."""
     valid = lag_corr_df.dropna(subset=["correlation"])
     if valid.empty:
         raise ValueError("No valid lag correlations available.")
@@ -63,13 +73,13 @@ def estimate_lag_time(lag_corr_df: pd.DataFrame) -> tuple[int, float]:
 
 
 def find_rainfall_events(df: pd.DataFrame, percentile: float = 90.0) -> pd.DataFrame:
-    """Find high rainfall events using a percentile threshold."""
+    """Find high rainfall events exceeding the given wet-day percentile threshold."""
     if not 0 < percentile < 100:
         raise ValueError("percentile must be between 0 and 100.")
 
     wet_days = df[df["rainfall_mm"] > 0]
     if wet_days.empty:
-        return df.iloc[0:0].copy()
+        return df.iloc[0:0][["date", "rainfall_mm", "spring_discharge_m3s"]].copy()
 
     threshold = float(np.percentile(wet_days["rainfall_mm"], percentile))
     events = df[df["rainfall_mm"] >= threshold].copy()
@@ -81,11 +91,11 @@ def find_discharge_peaks(
     prominence: float | None = None,
     distance_days: int = 3,
 ) -> pd.DataFrame:
-    """Find discharge peaks using scipy.signal.find_peaks."""
+    """Detect spring discharge peaks using scipy.signal.find_peaks (or fallback)."""
     if distance_days < 1:
         raise ValueError("distance_days must be at least 1.")
 
-    discharge = df["spring_discharge_m3s"].to_numpy()
+    discharge = df["spring_discharge_m3s"].to_numpy(dtype=float)
     if prominence is None:
         prominence = max(0.05, float(np.nanstd(discharge) * 0.8))
 
@@ -99,22 +109,33 @@ def find_discharge_peaks(
     return peaks.reset_index(drop=True)
 
 
-def build_analysis_summary(df: pd.DataFrame, max_lag_days: int = 14) -> tuple[AnalysisSummary, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Run the core MVP analyses and return summary plus event tables."""
+def build_analysis_summary(
+    df: pd.DataFrame,
+    max_lag_days: int = 14,
+    rainfall_percentile: float = 90.0,
+    discharge_prominence: float | None = None,
+    peak_distance_days: int = 3,
+) -> tuple[AnalysisSummary, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Run core karst rainfall-response analyses and return summary + tables."""
     lag_df = lag_correlations(df, max_lag_days=max_lag_days)
     estimated_lag, estimated_corr = estimate_lag_time(lag_df)
-    rainfall_events = find_rainfall_events(df)
-    discharge_peaks = find_discharge_peaks(df)
+    rainfall_events = find_rainfall_events(df, percentile=rainfall_percentile)
+    discharge_peaks = find_discharge_peaks(
+        df,
+        prominence=discharge_prominence,
+        distance_days=peak_distance_days,
+    )
 
     summary = AnalysisSummary(
         total_rainfall_mm=float(df["rainfall_mm"].sum()),
         mean_discharge_m3s=float(df["spring_discharge_m3s"].mean()),
         max_discharge_m3s=float(df["spring_discharge_m3s"].max()),
+        min_discharge_m3s=float(df["spring_discharge_m3s"].min()),
         rainfall_discharge_corr=rainfall_discharge_correlation(df),
         estimated_lag_days=estimated_lag,
         estimated_lag_corr=estimated_corr,
-        rainfall_peak_count=len(rainfall_events),
-        discharge_peak_count=len(discharge_peaks),
+        rainfall_peak_count=int(len(rainfall_events)),
+        discharge_peak_count=int(len(discharge_peaks)),
     )
     return summary, lag_df, rainfall_events, discharge_peaks
 
@@ -124,13 +145,13 @@ def _fallback_find_peaks(
     prominence: float,
     distance_days: int,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Small local peak finder used when scipy is not installed."""
+    """Lightweight local peak finder used only when scipy is unavailable."""
     candidates: list[tuple[int, float]] = []
     for idx in range(1, len(values) - 1):
         if values[idx] > values[idx - 1] and values[idx] >= values[idx + 1]:
-            local_prominence = values[idx] - max(values[idx - 1], values[idx + 1])
-            if local_prominence >= prominence:
-                candidates.append((idx, float(local_prominence)))
+            local_prom = values[idx] - max(values[idx - 1], values[idx + 1])
+            if local_prom >= prominence:
+                candidates.append((idx, float(local_prom)))
 
     selected: list[tuple[int, float]] = []
     for idx, prom in sorted(candidates, key=lambda item: values[item[0]], reverse=True):
